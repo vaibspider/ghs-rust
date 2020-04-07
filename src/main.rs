@@ -11,7 +11,7 @@ fn main() {
   }
   let input_file = args.nth(1).unwrap();
 
-  let input_buffer = std::fs::read_to_string(input_file).unwrap();
+  let input_buffer = std::fs::read_to_string(input_file).expect("Unable to open input file");
   let input_buffer = input_buffer.as_str();
   let mut lines = input_buffer.lines();
   let lines_ref = &mut lines;
