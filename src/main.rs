@@ -28,7 +28,7 @@ enum Status {
 enum NodeId {
     Id(u32),
 }
-struct Node {
+struct Node<'a> {
     index: NodeIndex,
     state: State,
     status: HashMap<NodeIndex, Status>,
@@ -43,10 +43,12 @@ struct Node {
     graph: Graph<i32, i32, Undirected>,
     receiver: Receiver<Message>,
     sender: Sender<Message>,
+    mapping: HashMap<NodeIndex, &'a Node<'a>>,
 }
 
-impl Node {
-    fn new(&self, graph_node: graph::Node<i32>, graph: Graph<i32, i32, Undirected>, index: NodeIndex) -> Self {
+impl<'a> Node<'a> {
+    fn new(&self, graph_node: graph::Node<i32>, graph: Graph<i32, i32, Undirected>, index: NodeIndex, mapping: HashMap<NodeIndex, &'a Node>) -> Self {
+      // assuming that the calling function will add a mapping from this NodeIndex to Node
         let (sender, receiver) = mpsc::channel();
         let node = Node {
             index: index,
@@ -63,7 +65,9 @@ impl Node {
             graph: graph,
             sender: sender,
             receiver: receiver,
+            mapping: mapping,
         };
+
         node
     }
     fn initialize(&mut self) {
@@ -82,6 +86,9 @@ impl Node {
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
+        let node_q = self.mapping.get(&nbr_q).expect("Error while getting node_q from nbr_q nodeindex");
+        let sender = node_q.sender.clone();
+        sender.send(Message::Connect(0));
     }
 }
 
@@ -119,4 +126,5 @@ fn main() {
     println!("No. of Edges: {}", edges);
     graph.extend_with_edges(&edges_vec[..]);
     println!("{:?}", graph);
+    let mapping: HashMap<NodeIndex, &Node> = HashMap::new();
 }
