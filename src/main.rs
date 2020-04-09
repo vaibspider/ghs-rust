@@ -4,11 +4,21 @@ use std::str::FromStr;
 use std::{env, process};
 use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
+use std::sync::mpsc::{self, Sender, Receiver};
 
 enum State {
     Sleep,
     Find,
     Found,
+}
+enum Message {
+  Connect(u32), // level
+  Initiate(u32, String, State), // level, name, state
+  Test(u32, String), // level, name
+  Accept,
+  Reject,
+  Report(u32), // bestWt
+  ChangeRoot,
 }
 enum Status {
     Basic,
@@ -31,10 +41,13 @@ struct Node {
     test_node: Option<NodeId>,
     graph_node: graph::Node<i32>,
     graph: Graph<i32, i32, Undirected>,
+    receiver: Receiver<Message>,
+    sender: Sender<Message>,
 }
 
 impl Node {
     fn new(&self, graph_node: graph::Node<i32>, graph: Graph<i32, i32, Undirected>, index: NodeIndex) -> Self {
+        let (sender, receiver) = mpsc::channel();
         let node = Node {
             index: index,
             state: State::Sleep,
@@ -48,12 +61,14 @@ impl Node {
             test_node: None,
             graph_node: graph_node,
             graph: graph,
+            sender: sender,
+            receiver: receiver,
         };
         node
     }
     fn initialize(&mut self) {
         let mut edges = self.graph.edges(self.index);
-        let edge_min = edges.min_by_key(|edge_ref| edge_ref.weight()).unwrap();
+        let edge_min = edges.min_by_key(|edge_ref| edge_ref.weight()).expect("Error while finding least weight edge during initialization");
         let src = edge_min.source();
         let target = edge_min.target();
         let nbr_q;
