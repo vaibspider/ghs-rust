@@ -1,10 +1,10 @@
 use petgraph::graph::{self, Graph, NodeIndex};
-use petgraph::Undirected;
-use std::str::FromStr;
-use std::{env, process};
 use petgraph::visit::EdgeRef;
+use petgraph::Undirected;
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::str::FromStr;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::{env, process};
 
 enum State {
     Sleep,
@@ -12,13 +12,13 @@ enum State {
     Found,
 }
 enum Message {
-  Connect(u32), // level
-  Initiate(u32, String, State), // level, name, state
-  Test(u32, String), // level, name
-  Accept,
-  Reject,
-  Report(u32), // bestWt
-  ChangeRoot,
+    Connect(u32),                 // level
+    Initiate(u32, String, State), // level, name, state
+    Test(u32, String),            // level, name
+    Accept,
+    Reject,
+    Report(u32), // bestWt
+    ChangeRoot,
 }
 enum Status {
     Basic,
@@ -47,8 +47,14 @@ struct Node<'a> {
 }
 
 impl<'a> Node<'a> {
-    fn new(&self, graph_node: graph::Node<i32>, graph: Graph<i32, i32, Undirected>, index: NodeIndex, mapping: HashMap<NodeIndex, &'a Node>) -> Self {
-      // assuming that the calling function will add a mapping from this NodeIndex to Node
+    fn new(
+        &self,
+        graph_node: graph::Node<i32>,
+        graph: Graph<i32, i32, Undirected>,
+        index: NodeIndex,
+        mapping: HashMap<NodeIndex, &'a Node>,
+    ) -> Self {
+        // assuming that the calling function will add a mapping from this NodeIndex to Node
         let (sender, receiver) = mpsc::channel();
         let node = Node {
             index: index,
@@ -72,21 +78,25 @@ impl<'a> Node<'a> {
     }
     fn initialize(&mut self) {
         let mut edges = self.graph.edges(self.index);
-        let edge_min = edges.min_by_key(|edge_ref| edge_ref.weight()).expect("Error while finding least weight edge during initialization");
+        let edge_min = edges
+            .min_by_key(|edge_ref| edge_ref.weight())
+            .expect("Error while finding least weight edge during initialization");
         let src = edge_min.source();
         let target = edge_min.target();
         let nbr_q;
         if src == self.index {
-          nbr_q = target;
-        }
-        else {
-          nbr_q = src;
+            nbr_q = target;
+        } else {
+            nbr_q = src;
         }
         self.status.insert(nbr_q, Status::Branch);
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
-        let node_q = self.mapping.get(&nbr_q).expect("Error while getting node_q from nbr_q nodeindex");
+        let node_q = self
+            .mapping
+            .get(&nbr_q)
+            .expect("Error while getting node_q from nbr_q nodeindex");
         let sender = node_q.sender.clone();
         sender.send(Message::Connect(0));
     }
