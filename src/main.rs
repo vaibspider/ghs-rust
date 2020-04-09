@@ -1,58 +1,58 @@
-use petgraph::graph::{self, Graph, NodeIndex};
+use petgraph::graph::{self, Graph};
 use petgraph::Undirected;
 use std::str::FromStr;
 use std::{env, process};
 
 enum State {
-  Sleep,
-  Find,
-  Found
+    Sleep,
+    Find,
+    Found,
 }
 enum Status {
-  Basic,
-  Branch,
-  Reject
+    Basic,
+    Branch,
+    Reject,
 }
 enum NodeId {
-  Id(u32)
+    Id(u32),
 }
 struct Node {
-  id: NodeId,
-  state: State,
-  status: Vec<Status>,
-  name: String,
-  level: u32,
-  parent: Option<NodeId>,
-  bestWt: i32,
-  bestNode: Option<NodeId>,
-  rec: u32,
-  testNode: Option<NodeId>,
-  graphNode: graph::Node<i32>,
+    id: NodeId,
+    state: State,
+    status: Vec<Status>,
+    name: String,
+    level: u32,
+    parent: Option<NodeId>,
+    best_wt: i32,
+    best_node: Option<NodeId>,
+    rec: u32,
+    test_node: Option<NodeId>,
+    graph_node: graph::Node<i32>,
 }
 
 impl Node {
-  fn new(&self, graphNode: graph::Node<i32>) -> Self {
-    let wt: u32 = graphNode.weight as u32;
-    let node = Node {
-      id: NodeId::Id(wt),
-      state: State::Sleep,
-      status: Vec::new(),
-      name: wt.to_string(),
-      level: 0,
-      parent: None,
-      bestWt: 0,
-      bestNode: None,
-      rec: 0,
-      testNode: None,
-      graphNode: graphNode,
-    };
-    node
-  }
-  fn initialize(&mut self) {
-    self.level = 0;
-    self.state = State::Found;
-    self.rec = 0;
-  }
+    fn new(&self, graph_node: graph::Node<i32>) -> Self {
+        let wt: u32 = graph_node.weight as u32;
+        let node = Node {
+            id: NodeId::Id(wt),
+            state: State::Sleep,
+            status: Vec::new(),
+            name: wt.to_string(),
+            level: 0,
+            parent: None,
+            best_wt: 0,
+            best_node: None,
+            rec: 0,
+            test_node: None,
+            graph_node: graph_node,
+        };
+        node
+    }
+    fn initialize(&mut self) {
+        self.level = 0;
+        self.state = State::Found;
+        self.rec = 0;
+    }
 }
 
 fn main() {
