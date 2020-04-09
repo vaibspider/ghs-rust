@@ -1,7 +1,9 @@
-use petgraph::graph::{self, Graph};
+use petgraph::graph::{self, Graph, NodeIndex};
 use petgraph::Undirected;
 use std::str::FromStr;
 use std::{env, process};
+use petgraph::visit::EdgeRef;
+use std::collections::HashMap;
 
 enum State {
     Sleep,
@@ -17,9 +19,9 @@ enum NodeId {
     Id(u32),
 }
 struct Node {
-    id: NodeId,
+    index: NodeIndex,
     state: State,
-    status: Vec<Status>,
+    status: HashMap<NodeIndex, Status>,
     name: String,
     level: u32,
     parent: Option<NodeId>,
@@ -28,16 +30,16 @@ struct Node {
     rec: u32,
     test_node: Option<NodeId>,
     graph_node: graph::Node<i32>,
+    graph: Graph<i32, i32, Undirected>,
 }
 
 impl Node {
-    fn new(&self, graph_node: graph::Node<i32>) -> Self {
-        let wt: u32 = graph_node.weight as u32;
+    fn new(&self, graph_node: graph::Node<i32>, graph: Graph<i32, i32, Undirected>, index: NodeIndex) -> Self {
         let node = Node {
-            id: NodeId::Id(wt),
+            index: index,
             state: State::Sleep,
-            status: Vec::new(),
-            name: wt.to_string(),
+            status: HashMap::new(),
+            name: index.index().to_string(),
             level: 0,
             parent: None,
             best_wt: 0,
@@ -45,10 +47,23 @@ impl Node {
             rec: 0,
             test_node: None,
             graph_node: graph_node,
+            graph: graph,
         };
         node
     }
     fn initialize(&mut self) {
+        let mut edges = self.graph.edges(self.index);
+        let edge_min = edges.min_by_key(|edge_ref| edge_ref.weight()).unwrap();
+        let src = edge_min.source();
+        let target = edge_min.target();
+        let nbr_q;
+        if src == self.index {
+          nbr_q = target;
+        }
+        else {
+          nbr_q = src;
+        }
+        self.status.insert(nbr_q, Status::Branch);
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
