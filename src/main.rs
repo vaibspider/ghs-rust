@@ -30,7 +30,7 @@ enum Status {
 enum NodeId {
     Id(u32),
 }
-struct Node<'a> {
+struct Node {
     index: NodeIndex,
     state: State,
     status: HashMap<NodeIndex, Status>,
@@ -42,19 +42,21 @@ struct Node<'a> {
     rec: u32,
     test_node: Option<NodeId>,
     graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
-    receiver: Receiver<Message>,
-    sender: Sender<Message>,
-    mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
+    //receiver: Receiver<Message>,
+    //sender: RwLock<Sender<Message>>,
+    //sender_mapping: Option<HashMap<NodeIndex, Sender<Message>>>,
+    //receiver: Option<Receiver<Message>>,
+    //mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
 }
 
-impl<'a> Node<'a> {
+impl Node {
     fn new(
         graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
         index: NodeIndex,
-        mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
+        //mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
     ) -> Self {
         // assuming that the calling function will add a mapping from this NodeIndex to Node
-        let (sender, receiver) = mpsc::channel();
+        //let (sender, receiver) = mpsc::channel();
         let node = Node {
             index: index,
             state: State::Sleep,
@@ -67,14 +69,16 @@ impl<'a> Node<'a> {
             rec: 0,
             test_node: None,
             graph: graph,
-            sender: sender,
-            receiver: receiver,
-            mapping: mapping,
+            //sender: RwLock::new(sender),
+            //receiver: receiver,
+            //sender_mapping: None,
+            //receiver: None,
+            //mapping: mapping,
         };
 
         node
     }
-    fn initialize(&mut self/*, mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>*/) {
+    fn initialize(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>, receiver: &Receiver<Message>/*, mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>*/) {
         println!("Entered initialize..");
         let graph = self.graph.read().unwrap();
         let edges = graph.edges(self.index);
@@ -93,6 +97,10 @@ impl<'a> Node<'a> {
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
+        let sender = sender_mapping.get(&nbr_q).unwrap();
+        sender.send(Message::Connect(0));
+        //self.sender_mapping = Some(sender_mapping);
+        //self.receiver = Some(receiver);
         //self.mapping = mapping;
         println!("Set fields..");
         /*let first_mapping = self.mapping.as_ref().unwrap();
@@ -157,18 +165,36 @@ fn main() {
     let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> = Arc::new(RwLock::new(orig_mapping));
     for node_index in graph.read().unwrap().node_indices() {
       println!("creating node and mapping..");
-      let node = Node::new(Arc::clone(&graph), node_index, None);
+      let node = Node::new(Arc::clone(&graph), node_index);
       let mut mapping = orig_mapping.write().unwrap();
       mapping.insert(node_index, RwLock::new(node));
       println!("created node and mapping..");
     }
+
+    let mut sender_mapping: HashMap<NodeIndex, Sender<Message>> = HashMap::new();
+    let mut receiver_mapping: HashMap<NodeIndex, Receiver<Message>> = HashMap::new();
+    for node_index in graph.read().unwrap().node_indices() {
+      let (sender, receiver) = mpsc::channel();
+      sender_mapping.insert(node_index, sender);
+      receiver_mapping.insert(node_index, receiver);
+    }
+
     let mut handles = vec![];
     for node_index in graph.read().unwrap().node_indices() {
+      let move_mapping = Arc::clone(&orig_mapping);
+      let sender_mapping = sender_mapping.clone();
+      let receiver = receiver_mapping.remove(&node_index).unwrap();
       let handle = thread::spawn(move || {
         println!("Thread no. {:?}", node_index);
-        let mapping = orig_mapping.read().unwrap();
+        let receiver = receiver;
+        let sender_mapping = sender_mapping;
+        let mapping = move_mapping.read().unwrap();
         let mut node = mapping.get(&node_index).unwrap();
         let mut node = node.write().unwrap();
+        node.initialize(&sender_mapping, &receiver);
+        for recv in receiver {
+          println!("Thread [{:?}]: Got message", node_index);
+        }
       });
       handles.push(handle);
     }
