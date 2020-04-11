@@ -42,21 +42,13 @@ struct Node {
     rec: u32,
     test_node: Option<NodeId>,
     graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
-    //receiver: Receiver<Message>,
-    //sender: RwLock<Sender<Message>>,
-    //sender_mapping: Option<HashMap<NodeIndex, Sender<Message>>>,
-    //receiver: Option<Receiver<Message>>,
-    //mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
 }
 
 impl Node {
     fn new(
         graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
         index: NodeIndex,
-        //mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>,
     ) -> Self {
-        // assuming that the calling function will add a mapping from this NodeIndex to Node
-        //let (sender, receiver) = mpsc::channel();
         let node = Node {
             index: index,
             state: State::Sleep,
@@ -69,16 +61,11 @@ impl Node {
             rec: 0,
             test_node: None,
             graph: graph,
-            //sender: RwLock::new(sender),
-            //receiver: receiver,
-            //sender_mapping: None,
-            //receiver: None,
-            //mapping: mapping,
         };
 
         node
     }
-    fn initialize(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>, receiver: &Receiver<Message>/*, mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>*/) {
+    fn initialize(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>, receiver: &Receiver<Message>) {
         println!("Entered initialize..");
         let graph = self.graph.read().unwrap();
         let edges = graph.edges(self.index);
@@ -99,28 +86,9 @@ impl Node {
         self.rec = 0;
         let sender = sender_mapping.get(&nbr_q).unwrap();
         sender.send(Message::Connect(0));
-        //self.sender_mapping = Some(sender_mapping);
-        //self.receiver = Some(receiver);
-        //self.mapping = mapping;
         println!("Set fields..");
-        /*let first_mapping = self.mapping.as_ref().unwrap();
-        println!("first_mapping");
-        let tmp_mapping = first_mapping.lock().unwrap();
-        println!("tmp_mapping");
-        let node_q = tmp_mapping
-            .get(&nbr_q)
-            .expect("Error while getting node_q from nbr_q nodeindex");
-        let node_q = node_q.lock().unwrap();
-        println!("Got node_q lock..");
-        let sender = node_q.sender.clone();
-        println!("Cloned sender..");
-        println!("sending..");
-        sender.send(Message::Connect(0));
-        println!("sent message..");*/
+        println!("sent message..");
     }
-    /*fn set_mapping(&mut self, mapping: Option<Arc<RwLock<HashMap<NodeIndex, RwLock<Node<'a>>>>>>) {
-      self.mapping = mapping;
-    }*/
 }
 
 fn main() {
@@ -138,7 +106,6 @@ fn main() {
     let nodes = lines_ref.next().unwrap();
     let nodes = u32::from_str(nodes).unwrap();
     println!("No. of Nodes: {:?}", nodes);
-    //let graph: Arc<RwLock<Graph<i32, i32, Undirected>>> = Arc::new(RwLock::new(Graph::default()));
     let mut graph: Graph<i32, i32, Undirected> = Graph::default();
     let mut edges_vec = vec![];
     let mut edges = 0;
