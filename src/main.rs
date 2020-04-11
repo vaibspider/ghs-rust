@@ -4,9 +4,9 @@ use petgraph::Undirected;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::{env, process};
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::{env, process};
 
 enum State {
     Sleep,
@@ -45,12 +45,9 @@ struct Node {
 }
 
 impl Node {
-    fn new(
-        graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
-        index: NodeIndex,
-    ) -> Self {
-        let node = Node {
-            index: index,
+    fn new(graph: Arc<RwLock<Graph<i32, i32, Undirected>>>, index: NodeIndex) -> Self {
+        Node {
+            index,
             state: State::Sleep,
             status: HashMap::new(),
             name: index.index().to_string(),
@@ -60,12 +57,14 @@ impl Node {
             best_node: None,
             rec: 0,
             test_node: None,
-            graph: graph,
-        };
-
-        node
+            graph,
+        }
     }
-    fn initialize(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>, receiver: &Receiver<Message>) {
+    fn initialize(
+        &mut self,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+        _receiver: &Receiver<Message>,
+    ) {
         println!("Entered initialize..");
         let graph = self.graph.read().unwrap();
         let edges = graph.edges(self.index);
@@ -74,18 +73,13 @@ impl Node {
             .expect("Error while finding least weight edge during initialization");
         let src = edge_min.source();
         let target = edge_min.target();
-        let nbr_q;
-        if src == self.index {
-            nbr_q = target;
-        } else {
-            nbr_q = src;
-        }
+        let nbr_q = if src == self.index { target } else { src };
         self.status.insert(nbr_q, Status::Branch);
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
         let sender = sender_mapping.get(&nbr_q).unwrap();
-        sender.send(Message::Connect(0));
+        sender.send(Message::Connect(0)).unwrap();
         println!("Set fields..");
         println!("sent message..");
     }
@@ -127,46 +121,46 @@ fn main() {
     println!("{:?}", graph);
 
     let graph: Arc<RwLock<Graph<i32, i32, Undirected>>> = Arc::new(RwLock::new(graph));
-    let copy_graph = graph.clone();
     let orig_mapping: HashMap<NodeIndex, RwLock<Node>> = HashMap::new();
-    let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> = Arc::new(RwLock::new(orig_mapping));
+    let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> =
+        Arc::new(RwLock::new(orig_mapping));
     for node_index in graph.read().unwrap().node_indices() {
-      println!("creating node and mapping..");
-      let node = Node::new(Arc::clone(&graph), node_index);
-      let mut mapping = orig_mapping.write().unwrap();
-      mapping.insert(node_index, RwLock::new(node));
-      println!("created node and mapping..");
+        println!("creating node and mapping..");
+        let node = Node::new(Arc::clone(&graph), node_index);
+        let mut mapping = orig_mapping.write().unwrap();
+        mapping.insert(node_index, RwLock::new(node));
+        println!("created node and mapping..");
     }
 
     let mut sender_mapping: HashMap<NodeIndex, Sender<Message>> = HashMap::new();
     let mut receiver_mapping: HashMap<NodeIndex, Receiver<Message>> = HashMap::new();
     for node_index in graph.read().unwrap().node_indices() {
-      let (sender, receiver) = mpsc::channel();
-      sender_mapping.insert(node_index, sender);
-      receiver_mapping.insert(node_index, receiver);
+        let (sender, receiver) = mpsc::channel();
+        sender_mapping.insert(node_index, sender);
+        receiver_mapping.insert(node_index, receiver);
     }
 
     let mut handles = vec![];
     for node_index in graph.read().unwrap().node_indices() {
-      let move_mapping = Arc::clone(&orig_mapping);
-      let sender_mapping = sender_mapping.clone();
-      let receiver = receiver_mapping.remove(&node_index).unwrap();
-      let handle = thread::spawn(move || {
-        println!("Thread no. {:?}", node_index);
-        let receiver = receiver;
-        let sender_mapping = sender_mapping;
-        let mapping = move_mapping.read().unwrap();
-        let mut node = mapping.get(&node_index).unwrap();
-        let mut node = node.write().unwrap();
-        node.initialize(&sender_mapping, &receiver);
-        for recv in receiver {
-          println!("Thread [{:?}]: Got message", node_index);
-        }
-      });
-      handles.push(handle);
+        let move_mapping = Arc::clone(&orig_mapping);
+        let sender_mapping = sender_mapping.clone();
+        let receiver = receiver_mapping.remove(&node_index).unwrap();
+        let handle = thread::spawn(move || {
+            println!("Thread no. {:?}", node_index);
+            let receiver = receiver;
+            let sender_mapping = sender_mapping;
+            let mapping = move_mapping.read().unwrap();
+            let node = mapping.get(&node_index).unwrap();
+            let mut node = node.write().unwrap();
+            node.initialize(&sender_mapping, &receiver);
+            for _recv in receiver {
+                println!("Thread [{:?}]: Got message", node_index);
+            }
+        });
+        handles.push(handle);
     }
     for handle in handles {
-      handle.join();
+        handle.join().unwrap();
     }
     println!("All threads finished!");
 }
