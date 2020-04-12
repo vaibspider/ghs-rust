@@ -138,31 +138,73 @@ impl Node {
             self.best_node = None;
             self.best_wt = std::i32::MAX;
             self.test_node = None;
-            let graph = self.graph.read().unwrap();
-            for nbr_index in graph.neighbors(self.index) {
-                if nbr_index != sender_index
-                    && *self.status.get(&nbr_index).unwrap() == Status::Branch
-                {
-                    let sender = sender_mapping.get(&nbr_index).unwrap();
-                    sender
-                        .send(Message::Initiate(
-                            level,
-                            name.clone(), // could be a potential problem
-                            state,
-                            self.index,
-                        ))
-                        .unwrap();
+            {
+                let graph = self.graph.read().unwrap();
+                for nbr_index in graph.neighbors(self.index) {
+                    if nbr_index != sender_index
+                        && *self.status.get(&nbr_index).unwrap() == Status::Branch
+                    {
+                        let sender = sender_mapping.get(&nbr_index).unwrap();
+                        sender
+                            .send(Message::Initiate(
+                                level,
+                                name.clone(), // could be a potential problem
+                                state,
+                                self.index,
+                            ))
+                            .unwrap();
+                    }
                 }
             }
             if state == State::Find {
                 self.rec = 0;
-                self.find_min();
+                self.find_min(sender_mapping);
             }
         } else {
             panic!("Wrong message!");
         }
     }
-    fn find_min(&self) {}
+    fn find_min(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
+        let graph = self.graph.read().unwrap();
+        let edges = graph.edges(self.index);
+        let mut min_edge = None;
+        let mut q = None;
+        for edge in edges {
+            let src = edge.source();
+            let target = edge.target();
+            let nbr_q = if src == self.index { target } else { src };
+            if *self.status.get(&nbr_q).unwrap() == Status::Basic {
+                if min_edge == None {
+                    min_edge = Some(edge);
+                    q = Some(nbr_q);
+                } else {
+                    if edge.weight() < min_edge.unwrap().weight() {
+                        min_edge = Some(edge);
+                        q = Some(nbr_q);
+                    } else {
+                        //skip
+                    }
+                }
+            }
+        }
+        if let Some(edge) = min_edge {
+            if let Some(nbr_q) = q {
+                self.test_node = q;
+                let sender = sender_mapping.get(&nbr_q).unwrap();
+                sender
+                    .send(Message::Test(self.level, self.name.clone(), self.index))
+                    .unwrap(); // check clone()
+            } else {
+                //invalid / impossible
+            }
+        } else {
+            self.test_node = None;
+            self.report();
+        }
+        /*  if self.status.get(&nbr_index).unwrap() == Status::Basic {
+        }*/
+    }
+    fn report(&self) {}
 }
 
 fn main() {
