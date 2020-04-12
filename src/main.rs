@@ -33,20 +33,17 @@ enum Status {
     Branch,
     Reject,
 }
-enum NodeId {
-    Id(u32),
-}
 struct Node {
     index: NodeIndex,
     state: State,
     status: HashMap<NodeIndex, Status>,
     name: String,
     level: u32,
-    parent: Option<NodeId>,
+    parent: Option<NodeIndex>,
     best_wt: i32,
-    best_node: Option<NodeId>,
+    best_node: Option<NodeIndex>,
     rec: u32,
-    test_node: Option<NodeId>,
+    test_node: Option<NodeIndex>,
     graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
 }
 
@@ -81,6 +78,11 @@ impl Node {
         let target = edge_min.target();
         let nbr_q = if src == self.index { target } else { src };
         self.status.insert(nbr_q, Status::Branch);
+        for node_index in graph.node_indices() {
+            if node_index != nbr_q {
+                self.status.insert(node_index, Status::Basic);
+            }
+        }
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
@@ -123,6 +125,44 @@ impl Node {
             panic!("Wrong message!");
         }
     }
+    fn process_initiate(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::Initiate(level, name, state, sender_index) = msg {
+            self.level = level;
+            self.name = name.clone(); // could be a potential problem
+            self.state = state;
+            self.parent = Some(sender_index);
+            self.best_node = None;
+            self.best_wt = std::i32::MAX;
+            self.test_node = None;
+            let graph = self.graph.read().unwrap();
+            for nbr_index in graph.neighbors(self.index) {
+                if nbr_index != sender_index
+                    && *self.status.get(&nbr_index).unwrap() == Status::Branch
+                {
+                    let sender = sender_mapping.get(&nbr_index).unwrap();
+                    sender
+                        .send(Message::Initiate(
+                            level,
+                            name.clone(), // could be a potential problem
+                            state,
+                            self.index,
+                        ))
+                        .unwrap();
+                }
+            }
+            if state == State::Find {
+                self.rec = 0;
+                self.find_min();
+            }
+        } else {
+            panic!("Wrong message!");
+        }
+    }
+    fn find_min(&self) {}
 }
 
 fn main() {
