@@ -1,27 +1,33 @@
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::Undirected;
+use std::clone::Clone;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
+use std::marker::Copy;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::{env, process};
 
+#[derive(PartialEq, Copy, Clone)]
 enum State {
     Sleep,
     Find,
     Found,
 }
+#[derive(PartialEq)]
 enum Message {
-    Connect(u32),                 // level
-    Initiate(u32, String, State), // level, name, state
-    Test(u32, String),            // level, name
-    Accept,
-    Reject,
-    Report(u32), // bestWt
-    ChangeRoot,
+    Connect(u32, NodeIndex),                 // level
+    Initiate(u32, String, State, NodeIndex), // level, name, state
+    Test(u32, String, NodeIndex),            // level, name
+    Accept(NodeIndex),
+    Reject(NodeIndex),
+    Report(u32, NodeIndex), // bestWt
+    ChangeRoot(NodeIndex),
 }
+#[derive(PartialEq)]
 enum Status {
     Basic,
     Branch,
@@ -79,9 +85,43 @@ impl Node {
         self.state = State::Found;
         self.rec = 0;
         let sender = sender_mapping.get(&nbr_q).unwrap();
-        sender.send(Message::Connect(0)).unwrap();
+        sender.send(Message::Connect(0, self.index)).unwrap();
         println!("Set fields..");
         println!("sent message..");
+    }
+    fn process_connect(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::Connect(level, sender_index) = msg {
+            if level < self.level {
+                self.status.insert(sender_index, Status::Branch);
+                let sender = sender_mapping.get(&sender_index).unwrap();
+                sender
+                    .send(Message::Initiate(
+                        self.level,
+                        self.name.clone(),
+                        self.state,
+                        self.index,
+                    ))
+                    .unwrap();
+            } else if *self.status.get(&sender_index).unwrap() == Status::Basic {
+                // wait (do nothing?)
+            } else {
+                let sender = sender_mapping.get(&sender_index).unwrap();
+                sender
+                    .send(Message::Initiate(
+                        self.level + 1,
+                        format!("{}{}", self.name, sender_index.index().to_string()),
+                        State::Find,
+                        self.index,
+                    ))
+                    .unwrap();
+            }
+        } else {
+            panic!("Wrong message!");
+        }
     }
 }
 
@@ -145,22 +185,24 @@ fn main() {
         let move_mapping = Arc::clone(&orig_mapping);
         let sender_mapping = sender_mapping.clone();
         let receiver = receiver_mapping.remove(&node_index).unwrap();
-        let handle = thread::spawn(move || {
-            println!("Thread no. {:?}", node_index);
-            let receiver = receiver;
-            let sender_mapping = sender_mapping;
-            let mapping = move_mapping.read().unwrap();
-            let node = mapping.get(&node_index).unwrap();
-            let mut node = node.write().unwrap();
-            node.initialize(&sender_mapping, &receiver);
-            for _recv in receiver {
-                println!("Thread [{:?}]: Got message", node_index);
-            }
-        });
+        let handle = thread::Builder::new()
+            .name(node_index.index().to_string())
+            .spawn(move || {
+                println!("Thread no. {:?}", node_index);
+                let receiver = receiver;
+                let sender_mapping = sender_mapping;
+                let mapping = move_mapping.read().unwrap();
+                let node = mapping.get(&node_index).unwrap();
+                let mut node = node.write().unwrap();
+                node.initialize(&sender_mapping, &receiver);
+                for _recv in receiver {
+                    println!("Thread [{:?}]: Got message", node_index);
+                }
+            });
         handles.push(handle);
     }
     for handle in handles {
-        handle.join().unwrap();
+        handle.unwrap().join().unwrap();
     }
     println!("All threads finished!");
 }
