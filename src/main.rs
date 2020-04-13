@@ -225,6 +225,32 @@ impl Node {
             //skip
         }
     }
+    fn process_test(&mut self, msg: Message, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
+      if let Message::Test(level, name, sender_index) = msg {
+        if level > self.level {
+          //wait
+        }
+        else if self.name == name {
+          if *self.status.get(&sender_index).unwrap() == Status::Basic {
+            self.status.insert(sender_index, Status::Reject);
+          }
+          if sender_index != self.test_node.unwrap() {
+            let sender = sender_mapping.get(&sender_index).unwrap();
+            sender.send(Message::Reject(self.index)).unwrap();
+          }
+          else {
+            self.find_min(sender_mapping);
+          }
+        }
+        else {
+          let sender = sender_mapping.get(&sender_index).unwrap();
+          sender.send(Message::Accept(self.index)).unwrap();
+        }
+      }
+      else {
+        // invalid message
+      }
+    }
 }
 
 fn main() {
