@@ -7,22 +7,24 @@ use std::collections::HashMap;
 use std::marker::Copy;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::RecvError;
+use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::{env, process};
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 enum State {
     Sleep,
     Find,
     Found,
 }
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 enum Message {
-    Connect(u32, NodeIndex),                 // level
-    Initiate(u32, String, State, NodeIndex), // level, name, state
-    Test(u32, String, NodeIndex),            // level, name
+    Connect(u32, NodeIndex),              // level
+    Initiate(u32, u32, State, NodeIndex), // level, name, state
+    Test(u32, u32, NodeIndex),            // level, name
     Accept(NodeIndex),
     Reject(NodeIndex),
     Report(i32, NodeIndex), // bestWt
@@ -38,7 +40,7 @@ struct Node {
     index: NodeIndex,
     state: State,
     status: HashMap<NodeIndex, Status>,
-    name: String,
+    name: u32,
     level: u32,
     parent: Option<NodeIndex>,
     best_wt: i32,
@@ -59,7 +61,7 @@ impl Node {
             index,
             state: State::Sleep,
             status: HashMap::new(),
-            name: index.index().to_string(),
+            name: index.index() as u32,
             level: 0,
             parent: None,
             best_wt: std::i32::MAX,
@@ -109,10 +111,7 @@ impl Node {
                 let sender = sender_mapping.get(&sender_index).unwrap();
                 sender
                     .send(Message::Initiate(
-                        self.level,
-                        self.name.clone(),
-                        self.state,
-                        self.index,
+                        self.level, self.name, self.state, self.index,
                     ))
                     .unwrap();
             } else if *self.status.get(&sender_index).unwrap() == Status::Basic {
@@ -121,10 +120,27 @@ impl Node {
                 sender.send(msg).unwrap();
             } else {
                 let sender = sender_mapping.get(&sender_index).unwrap();
+                let new_name = if self.name < sender_index.index() as u32 {
+                    format!(
+                        "{}{}",
+                        self.name.to_string(),
+                        sender_index.index().to_string()
+                    )
+                    .parse::<u32>()
+                    .unwrap()
+                } else {
+                    format!(
+                        "{}{}",
+                        sender_index.index().to_string(),
+                        self.name.to_string()
+                    )
+                    .parse::<u32>()
+                    .unwrap()
+                };
                 sender
                     .send(Message::Initiate(
                         self.level + 1,
-                        format!("{}{}", self.name, sender_index.index().to_string()),
+                        new_name,
                         State::Find,
                         self.index,
                     ))
@@ -141,7 +157,7 @@ impl Node {
     ) {
         if let Message::Initiate(level, name, state, sender_index) = msg {
             self.level = level;
-            self.name = name.clone(); // could be a potential problem
+            self.name = name; // could be a potential problem
             self.state = state;
             self.parent = Some(sender_index);
             self.best_node = None;
@@ -156,10 +172,8 @@ impl Node {
                         let sender = sender_mapping.get(&nbr_index).unwrap();
                         sender
                             .send(Message::Initiate(
-                                level,
-                                name.clone(), // could be a potential problem
-                                state,
-                                self.index,
+                                level, name, // could be a potential problem
+                                state, self.index,
                             ))
                             .unwrap();
                     }
@@ -201,12 +215,12 @@ impl Node {
                 }
             }
         }
-        if let Some(edge) = min_edge {
+        if let Some(_edge) = min_edge {
             if let Some(nbr_q) = q {
                 self.test_node = q;
                 let sender = sender_mapping.get(&nbr_q).unwrap();
                 sender
-                    .send(Message::Test(self.level, self.name.clone(), self.index))
+                    .send(Message::Test(self.level, self.name, self.index))
                     .unwrap(); // check clone()
             } else {
                 //invalid / impossible
@@ -352,7 +366,7 @@ impl Node {
         msg: Message,
         sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
     ) {
-        if let Message::ChangeRoot(sender_index) = msg {
+        if let Message::ChangeRoot(_sender_index) = msg {
             self.change_root(sender_mapping);
         } else {
             //invalid
@@ -418,7 +432,6 @@ fn main() {
 
     let mut handles = vec![];
     for node_index in graph.read().unwrap().node_indices() {
-        let stop = Arc::clone(&stop);
         let move_mapping = Arc::clone(&orig_mapping);
         let sender_mapping = sender_mapping.clone();
         let receiver = receiver_mapping.remove(&node_index).unwrap();
@@ -432,9 +445,48 @@ fn main() {
                 let node = mapping.get(&node_index).unwrap();
                 let mut node = node.write().unwrap();
                 node.initialize(&sender_mapping, &receiver);
-                for _recv in receiver {
-                    println!("Thread [{:?}]: Got message", node_index);
+                loop {
+                    let recv = receiver.try_recv();
+                    {
+                        if *node.stop.write().unwrap().get_mut() {
+                            break;
+                        }
+                    }
+                    let msg = match recv {
+                        Err(TryRecvError::Empty) => {
+                            continue;
+                        }
+                        Err(TryRecvError::Disconnected) => {
+                            break;
+                        }
+                        Ok(message) => message,
+                    };
+                    println!("Thread [{:?}]: Got message: {:?}", node_index, msg);
+                    match msg {
+                        Message::Connect(_, _) => {
+                            node.process_connect(msg, &sender_mapping);
+                        }
+                        Message::Initiate(_, _, _, _) => {
+                            node.process_initiate(msg, &sender_mapping);
+                        }
+                        Message::Test(_, _, _) => {
+                            node.process_test(msg, &sender_mapping);
+                        }
+                        Message::Accept(_) => {
+                            node.process_accept(msg, &sender_mapping);
+                        }
+                        Message::Reject(_) => {
+                            node.process_reject(msg, &sender_mapping);
+                        }
+                        Message::Report(_, _) => {
+                            node.process_report(msg, &sender_mapping);
+                        }
+                        Message::ChangeRoot(_) => {
+                            node.process_change_root(msg, &sender_mapping);
+                        }
+                    }
                 }
+                println!("Stopped");
             });
         handles.push(handle);
     }
