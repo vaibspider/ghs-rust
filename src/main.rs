@@ -56,7 +56,7 @@ impl Node {
             name: index.index().to_string(),
             level: 0,
             parent: None,
-            best_wt: 0,
+            best_wt: std::i32::MAX,
             best_node: None,
             rec: 0,
             test_node: None,
@@ -291,6 +291,35 @@ impl Node {
             //invalid
         }
     }
+    fn process_report(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::Report(wt, sender_index) = msg {
+            if sender_index != self.parent.unwrap() {
+                if wt < self.best_wt {
+                    self.best_wt = wt;
+                    self.best_node = Some(sender_index);
+                }
+                self.rec += 1;
+                self.report(sender_mapping);
+            } else {
+                if self.state == State::Find {
+                    //wait
+                } else if wt > self.best_wt {
+                    self.change_root();
+                } else if wt == self.best_wt && wt == std::i32::MAX {
+                    //stop (what to do here?)
+                } else {
+                    //invalid? do nothing?
+                }
+            }
+        } else {
+            //invalid
+        }
+    }
+    fn change_root(&self) {}
 }
 
 fn main() {
