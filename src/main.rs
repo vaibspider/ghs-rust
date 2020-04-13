@@ -226,30 +226,54 @@ impl Node {
         }
     }
     fn process_test(&mut self, msg: Message, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-      if let Message::Test(level, name, sender_index) = msg {
-        if level > self.level {
-          //wait
+        if let Message::Test(level, name, sender_index) = msg {
+            if level > self.level {
+                //wait
+            } else if self.name == name {
+                if *self.status.get(&sender_index).unwrap() == Status::Basic {
+                    self.status.insert(sender_index, Status::Reject);
+                }
+                if sender_index != self.test_node.unwrap() {
+                    let sender = sender_mapping.get(&sender_index).unwrap();
+                    sender.send(Message::Reject(self.index)).unwrap();
+                } else {
+                    self.find_min(sender_mapping);
+                }
+            } else {
+                let sender = sender_mapping.get(&sender_index).unwrap();
+                sender.send(Message::Accept(self.index)).unwrap();
+            }
+        } else {
+            // invalid message
         }
-        else if self.name == name {
-          if *self.status.get(&sender_index).unwrap() == Status::Basic {
-            self.status.insert(sender_index, Status::Reject);
-          }
-          if sender_index != self.test_node.unwrap() {
-            let sender = sender_mapping.get(&sender_index).unwrap();
-            sender.send(Message::Reject(self.index)).unwrap();
-          }
-          else {
-            self.find_min(sender_mapping);
-          }
+    }
+    fn process_accept(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::Accept(sender_index) = msg {
+            self.test_node = None;
+            let mut wt = 0; // see if the initial value is correct
+            {
+                let graph = self.graph.read().unwrap();
+                for edge in graph.edges(self.index) {
+                    let src = edge.source();
+                    let target = edge.target();
+                    let raw_edge = (self.index, sender_index);
+                    if (src, target) == raw_edge || (target, src) == raw_edge {
+                        // should get into at least once
+                        wt = *edge.weight();
+                        break;
+                    }
+                }
+            }
+            if wt < self.best_wt {
+                self.best_wt = wt;
+                self.best_node = Some(sender_index);
+            }
+            self.report(sender_mapping);
         }
-        else {
-          let sender = sender_mapping.get(&sender_index).unwrap();
-          sender.send(Message::Accept(self.index)).unwrap();
-        }
-      }
-      else {
-        // invalid message
-      }
     }
 }
 
