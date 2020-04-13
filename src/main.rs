@@ -6,6 +6,7 @@ use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::marker::Copy;
 use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -17,7 +18,7 @@ enum State {
     Find,
     Found,
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Message {
     Connect(u32, NodeIndex),                 // level
     Initiate(u32, String, State, NodeIndex), // level, name, state
@@ -45,10 +46,15 @@ struct Node {
     rec: u32,
     test_node: Option<NodeIndex>,
     graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
+    stop: Arc<RwLock<AtomicBool>>,
 }
 
 impl Node {
-    fn new(graph: Arc<RwLock<Graph<i32, i32, Undirected>>>, index: NodeIndex) -> Self {
+    fn new(
+        graph: Arc<RwLock<Graph<i32, i32, Undirected>>>,
+        index: NodeIndex,
+        stop: Arc<RwLock<AtomicBool>>,
+    ) -> Self {
         Node {
             index,
             state: State::Sleep,
@@ -61,6 +67,7 @@ impl Node {
             rec: 0,
             test_node: None,
             graph,
+            stop,
         }
     }
     fn initialize(
@@ -110,6 +117,8 @@ impl Node {
                     .unwrap();
             } else if *self.status.get(&sender_index).unwrap() == Status::Basic {
                 // wait (do nothing?)
+                let sender = sender_mapping.get(&self.index).unwrap();
+                sender.send(msg).unwrap();
             } else {
                 let sender = sender_mapping.get(&sender_index).unwrap();
                 sender
@@ -226,9 +235,12 @@ impl Node {
         }
     }
     fn process_test(&mut self, msg: Message, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
+        let msg_copy = msg.clone();
         if let Message::Test(level, name, sender_index) = msg {
             if level > self.level {
                 //wait
+                let sender = sender_mapping.get(&self.index).unwrap();
+                sender.send(msg_copy).unwrap();
             } else if self.name == name {
                 if *self.status.get(&sender_index).unwrap() == Status::Basic {
                     self.status.insert(sender_index, Status::Reject);
@@ -307,10 +319,14 @@ impl Node {
             } else {
                 if self.state == State::Find {
                     //wait
+                    let sender = sender_mapping.get(&self.index).unwrap();
+                    sender.send(msg).unwrap();
                 } else if wt > self.best_wt {
                     self.change_root(sender_mapping);
                 } else if wt == self.best_wt && wt == std::i32::MAX {
                     //stop (what to do here?)
+                    let mut stop = self.stop.write().unwrap();
+                    *stop.get_mut() = true;
                 } else {
                     //invalid? do nothing?
                 }
@@ -383,9 +399,10 @@ fn main() {
     let orig_mapping: HashMap<NodeIndex, RwLock<Node>> = HashMap::new();
     let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> =
         Arc::new(RwLock::new(orig_mapping));
+    let stop = Arc::new(RwLock::new(AtomicBool::new(false)));
     for node_index in graph.read().unwrap().node_indices() {
         println!("creating node and mapping..");
-        let node = Node::new(Arc::clone(&graph), node_index);
+        let node = Node::new(Arc::clone(&graph), node_index, Arc::clone(&stop));
         let mut mapping = orig_mapping.write().unwrap();
         mapping.insert(node_index, RwLock::new(node));
         println!("created node and mapping..");
@@ -401,6 +418,7 @@ fn main() {
 
     let mut handles = vec![];
     for node_index in graph.read().unwrap().node_indices() {
+        let stop = Arc::clone(&stop);
         let move_mapping = Arc::clone(&orig_mapping);
         let sender_mapping = sender_mapping.clone();
         let receiver = receiver_mapping.remove(&node_index).unwrap();
