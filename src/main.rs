@@ -308,7 +308,7 @@ impl Node {
                 if self.state == State::Find {
                     //wait
                 } else if wt > self.best_wt {
-                    self.change_root();
+                    self.change_root(sender_mapping);
                 } else if wt == self.best_wt && wt == std::i32::MAX {
                     //stop (what to do here?)
                 } else {
@@ -319,7 +319,18 @@ impl Node {
             //invalid
         }
     }
-    fn change_root(&self) {}
+    fn change_root(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
+        if *self.status.get(&self.best_node.unwrap()).unwrap() == Status::Branch {
+            let sender = sender_mapping.get(&self.best_node.unwrap()).unwrap();
+            sender.send(Message::ChangeRoot(self.index)).unwrap();
+        } else {
+            self.status.insert(self.best_node.unwrap(), Status::Branch);
+            let sender = sender_mapping.get(&self.best_node.unwrap()).unwrap();
+            sender
+                .send(Message::Connect(self.level, self.index))
+                .unwrap();
+        }
+    }
 }
 
 fn main() {
