@@ -24,7 +24,7 @@ enum Message {
     Test(u32, String, NodeIndex),            // level, name
     Accept(NodeIndex),
     Reject(NodeIndex),
-    Report(u32, NodeIndex), // bestWt
+    Report(i32, NodeIndex), // bestWt
     ChangeRoot(NodeIndex),
 }
 #[derive(PartialEq)]
@@ -165,24 +165,29 @@ impl Node {
         }
     }
     fn find_min(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        let graph = self.graph.read().unwrap();
-        let edges = graph.edges(self.index);
         let mut min_edge = None;
         let mut q = None;
-        for edge in edges {
-            let src = edge.source();
-            let target = edge.target();
-            let nbr_q = if src == self.index { target } else { src };
-            if *self.status.get(&nbr_q).unwrap() == Status::Basic {
-                if min_edge == None {
-                    min_edge = Some(edge);
-                    q = Some(nbr_q);
-                } else {
-                    if edge.weight() < min_edge.unwrap().weight() {
-                        min_edge = Some(edge);
+        let mut wt = 0; // check initial value is correct or not
+        {
+            let graph = self.graph.read().unwrap();
+            let edges = graph.edges(self.index);
+            for edge in edges {
+                let src = edge.source();
+                let target = edge.target();
+                let nbr_q = if src == self.index { target } else { src };
+                if *self.status.get(&nbr_q).unwrap() == Status::Basic {
+                    if min_edge == None {
+                        min_edge = Some(edge.id());
                         q = Some(nbr_q);
+                        wt = *edge.weight();
                     } else {
-                        //skip
+                        if *edge.weight() < wt {
+                            min_edge = Some(edge.id());
+                            q = Some(nbr_q);
+                            wt = *edge.weight();
+                        } else {
+                            //skip
+                        }
                     }
                 }
             }
@@ -199,12 +204,27 @@ impl Node {
             }
         } else {
             self.test_node = None;
-            self.report();
+            self.report(sender_mapping);
         }
-        /*  if self.status.get(&nbr_index).unwrap() == Status::Basic {
-        }*/
     }
-    fn report(&self) {}
+    fn report(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
+        let graph = self.graph.read().unwrap();
+        let mut cnt = 0;
+        for q in graph.node_indices() {
+            if *self.status.get(&q).unwrap() == Status::Branch && q != self.parent.unwrap() {
+                cnt += 1;
+            }
+        }
+        if self.rec == cnt && self.test_node == None {
+            self.state = State::Found;
+            let sender = sender_mapping.get(&self.parent.unwrap()).unwrap();
+            sender
+                .send(Message::Report(self.best_wt, self.index))
+                .unwrap();
+        } else {
+            //skip
+        }
+    }
 }
 
 fn main() {
