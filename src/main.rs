@@ -331,6 +331,17 @@ impl Node {
                 .unwrap();
         }
     }
+    fn process_change_root(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::ChangeRoot(sender_index) = msg {
+            self.change_root(sender_mapping);
+        } else {
+            //invalid
+        }
+    }
 }
 
 fn main() {
