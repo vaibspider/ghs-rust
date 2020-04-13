@@ -273,6 +273,22 @@ impl Node {
                 self.best_node = Some(sender_index);
             }
             self.report(sender_mapping);
+        } else {
+            //invalid
+        }
+    }
+    fn process_reject(
+        &mut self,
+        msg: Message,
+        sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
+    ) {
+        if let Message::Reject(sender_index) = msg {
+            if *self.status.get(&sender_index).unwrap() == Status::Basic {
+                self.status.insert(sender_index, Status::Reject);
+            }
+            self.find_min(sender_mapping);
+        } else {
+            //invalid
         }
     }
 }
