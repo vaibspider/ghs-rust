@@ -1,3 +1,5 @@
+use petgraph::algo::min_spanning_tree;
+use petgraph::data::Element;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::Undirected;
@@ -14,8 +16,6 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::{env, process};
-use petgraph::algo::min_spanning_tree;
-use petgraph::data::Element;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum State {
@@ -555,9 +555,14 @@ fn main() {
     let mut kruskal_output_file = File::create("kruskal_output.mst").unwrap();
     let kruskal_mst = min_spanning_tree(&graph);
     for item in kruskal_mst {
-      if let Element::Edge{source, target, weight} = item {
-        writeln!(kruskal_output_file, "({}, {}, {})", source, target, weight).unwrap();
-      }
+        if let Element::Edge {
+            source,
+            target,
+            weight,
+        } = item
+        {
+            writeln!(kruskal_output_file, "({}, {}, {})", source, target, weight).unwrap();
+        }
     }
 
     let graph: Arc<RwLock<Graph<i32, i32, Undirected>>> = Arc::new(RwLock::new(graph));
@@ -743,5 +748,4 @@ fn main() {
         let (one, two, three) = triplet;
         writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
     }
-
 }
