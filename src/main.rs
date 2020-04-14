@@ -13,6 +13,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::{env, process};
+use std::fs::File;
+use std::io::Write;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum State {
@@ -30,7 +32,7 @@ enum Message {
     Report(i32, NodeIndex), /* best_wt */
     ChangeRoot(NodeIndex),
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 enum Status {
     Basic,
     Branch,
@@ -698,14 +700,56 @@ fn main() {
                     }
                 }
                 println!("Thread no. {:?} Stopped!", node_index);
+                (node_index, node.status.clone())
             });
         handles.push(handle);
     }
+    println!("All threads finished!");
+    let mut data: HashMap<NodeIndex, HashMap<NodeIndex, Status>> = HashMap::new();
     for handle in handles {
-        handle
+        let (node_index, status_map) = handle
             .expect("Error while unwrapping 'handle':")
             .join()
             .expect("Error while unwrapping 'handle.join()':");
+        data.insert(node_index, status_map);
     }
-    println!("All threads finished!");
+    let mut pairs = vec![];
+    for (node_index, status_map) in data {
+      for (nbr_index, status) in status_map {
+        if status == Status::Branch {
+          let pair = if node_index < nbr_index { (node_index, nbr_index) } else { (nbr_index, node_index) };
+          if !pairs.contains(&pair) {
+            pairs.push(pair);
+          }
+        }
+      }
+    }
+    println!("Pairs: {:?}", pairs);
+    let mut weight_map = HashMap::new();
+    let graph = graph.read().unwrap();
+    for node_index in graph.node_indices() {
+      for edge in graph.edges(node_index) {
+        let src = edge.source();
+        let target = edge.target();
+        let weight = edge.weight();
+        let pair = if src < target { (src, target) } else { (target, src) };
+        weight_map.insert(pair, weight);
+      }
+    }
+    let mut triplets = vec![];
+    for pair in pairs {
+      let weight = weight_map.get(&pair).expect("Error while getting a pair weight from weight_map:");
+      let (one, two) = pair;
+      let triplet = (one, two, weight);
+      triplets.push(triplet);
+    }
+    println!("Triplets: {:?}", triplets);
+    triplets.sort_unstable_by(|(_, _, weight1), (_, _, weight2)| weight1.cmp(weight2));
+    println!("Sorted Triplets: {:?}", triplets);
+
+    let mut output_file = File::create("output.mst").unwrap();
+    for triplet in triplets {
+      let (one, two, three) = triplet;
+      writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
+    }
 }
