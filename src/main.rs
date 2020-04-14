@@ -4,17 +4,16 @@ use petgraph::Undirected;
 use std::clone::Clone;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::marker::Copy;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::RecvError;
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::{env, process};
-use std::fs::File;
-use std::io::Write;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum State {
@@ -265,20 +264,11 @@ impl Node {
                     .get(&nbr_q)
                     .expect("Error while reading 'status':")
                     == Status::Basic
+                    && (min_edge == None || *edge.weight() < wt)
                 {
-                    if min_edge == None {
-                        min_edge = Some(edge.id());
-                        q = Some(nbr_q);
-                        wt = *edge.weight();
-                    } else {
-                        if *edge.weight() < wt {
-                            min_edge = Some(edge.id());
-                            q = Some(nbr_q);
-                            wt = *edge.weight();
-                        } else {
-                            //skip
-                        }
-                    }
+                    min_edge = Some(edge.id());
+                    q = Some(nbr_q);
+                    wt = *edge.weight();
                 }
             }
         }
@@ -460,31 +450,29 @@ impl Node {
                 }
                 self.rec += 1;
                 self.report(sender_mapping);
+            } else if self.state == State::Find {
+                /* wait */
+                /* Add the message to the end of the channel */
+                let sender = sender_mapping
+                    .get(&self.index)
+                    .expect("Error while reading 'sender_mapping':");
+                sender
+                    .send(msg.clone())
+                    .expect("Error while sending message:");
+                println!(
+                    "Thread [{:?}]: Pushed message {:?} to the end of the channel",
+                    self.index, msg
+                );
+            /* Add artificial sleep? */
+            } else if wt > self.best_wt {
+                self.change_root(sender_mapping);
+            } else if wt == self.best_wt && wt == std::i32::MAX {
+                /* stop (what to do here?) */
+                let mut stop = self.stop.write().unwrap();
+                *stop.get_mut() = true;
+            /* send some 'message' to all the nodes? */
             } else {
-                if self.state == State::Find {
-                    /* wait */
-                    /* Add the message to the end of the channel */
-                    let sender = sender_mapping
-                        .get(&self.index)
-                        .expect("Error while reading 'sender_mapping':");
-                    sender
-                        .send(msg.clone())
-                        .expect("Error while sending message:");
-                    println!(
-                        "Thread [{:?}]: Pushed message {:?} to the end of the channel",
-                        self.index, msg
-                    );
-                /* Add artificial sleep? */
-                } else if wt > self.best_wt {
-                    self.change_root(sender_mapping);
-                } else if wt == self.best_wt && wt == std::i32::MAX {
-                    /* stop (what to do here?) */
-                    let mut stop = self.stop.write().unwrap();
-                    *stop.get_mut() = true;
-                /* send some 'message' to all the nodes? */
-                } else {
-                    //invalid? do nothing?
-                }
+                //invalid? do nothing?
             }
         } else {
             panic!("Wrong control flow!");
@@ -715,33 +703,43 @@ fn main() {
     }
     let mut pairs = vec![];
     for (node_index, status_map) in data {
-      for (nbr_index, status) in status_map {
-        if status == Status::Branch {
-          let pair = if node_index < nbr_index { (node_index, nbr_index) } else { (nbr_index, node_index) };
-          if !pairs.contains(&pair) {
-            pairs.push(pair);
-          }
+        for (nbr_index, status) in status_map {
+            if status == Status::Branch {
+                let pair = if node_index < nbr_index {
+                    (node_index, nbr_index)
+                } else {
+                    (nbr_index, node_index)
+                };
+                if !pairs.contains(&pair) {
+                    pairs.push(pair);
+                }
+            }
         }
-      }
     }
     println!("Pairs: {:?}", pairs);
     let mut weight_map = HashMap::new();
     let graph = graph.read().unwrap();
     for node_index in graph.node_indices() {
-      for edge in graph.edges(node_index) {
-        let src = edge.source();
-        let target = edge.target();
-        let weight = edge.weight();
-        let pair = if src < target { (src, target) } else { (target, src) };
-        weight_map.insert(pair, weight);
-      }
+        for edge in graph.edges(node_index) {
+            let src = edge.source();
+            let target = edge.target();
+            let weight = edge.weight();
+            let pair = if src < target {
+                (src, target)
+            } else {
+                (target, src)
+            };
+            weight_map.insert(pair, weight);
+        }
     }
     let mut triplets = vec![];
     for pair in pairs {
-      let weight = weight_map.get(&pair).expect("Error while getting a pair weight from weight_map:");
-      let (one, two) = pair;
-      let triplet = (one, two, weight);
-      triplets.push(triplet);
+        let weight = weight_map
+            .get(&pair)
+            .expect("Error while getting a pair weight from weight_map:");
+        let (one, two) = pair;
+        let triplet = (one, two, weight);
+        triplets.push(triplet);
     }
     println!("Triplets: {:?}", triplets);
     triplets.sort_unstable_by(|(_, _, weight1), (_, _, weight2)| weight1.cmp(weight2));
@@ -749,7 +747,7 @@ fn main() {
 
     let mut output_file = File::create("output.mst").unwrap();
     for triplet in triplets {
-      let (one, two, three) = triplet;
-      writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
+        let (one, two, three) = triplet;
+        writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
     }
 }
