@@ -22,12 +22,12 @@ enum State {
 }
 #[derive(PartialEq, Clone, Debug)]
 enum Message {
-    Connect(u32, NodeIndex),              // level
-    Initiate(u32, u32, State, NodeIndex), // level, name, state
-    Test(u32, u32, NodeIndex),            // level, name
+    Connect(u32, NodeIndex), /* level */
+    Initiate(u32, i32, State, NodeIndex), /* level, name, state */
+    Test(u32, i32, NodeIndex), /* level, name */
     Accept(NodeIndex),
     Reject(NodeIndex),
-    Report(i32, NodeIndex), // bestWt
+    Report(i32, NodeIndex), /* best_wt */
     ChangeRoot(NodeIndex),
 }
 #[derive(PartialEq)]
@@ -40,7 +40,7 @@ struct Node {
     index: NodeIndex,
     state: State,
     status: HashMap<NodeIndex, Status>,
-    name: u32,
+    name: i32,
     level: u32,
     parent: Option<NodeIndex>,
     best_wt: i32,
@@ -61,7 +61,7 @@ impl Node {
             index,
             state: State::Sleep,
             status: HashMap::new(),
-            name: index.index() as u32,
+            name: index.index() as i32,
             level: 0,
             parent: None,
             best_wt: std::i32::MAX,
@@ -75,18 +75,18 @@ impl Node {
     fn initialize(
         &mut self,
         sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
-        _receiver: &Receiver<Message>,
     ) {
-        println!("Entered initialize..");
-        let graph = self.graph.read().unwrap();
+        println!("Initializing node {:?}..", self.index);
+        let graph = self.graph.read().expect("Error while reading 'graph':");
         let edges = graph.edges(self.index);
         let edge_min = edges
             .min_by_key(|edge_ref| edge_ref.weight())
-            .expect("Error while finding least weight edge during initialization");
+            .expect("Error while finding least weight edge during initialization:");
         let src = edge_min.source();
         let target = edge_min.target();
         let nbr_q = if src == self.index { target } else { src };
         self.status.insert(nbr_q, Status::Branch);
+        /* Filling up 'status' of every node other than 'nbr_q' to be 'Status::Basic' */
         for node_index in graph.node_indices() {
             if node_index != nbr_q {
                 self.status.insert(node_index, Status::Basic);
@@ -95,10 +95,10 @@ impl Node {
         self.level = 0;
         self.state = State::Found;
         self.rec = 0;
-        let sender = sender_mapping.get(&nbr_q).unwrap();
-        sender.send(Message::Connect(0, self.index)).unwrap();
-        println!("Set fields..");
-        println!("sent message..");
+        let sender = sender_mapping.get(&nbr_q).expect("Error while reading 'sender_mapping':");
+        let msg = Message::Connect(0, self.index);
+        sender.send(msg.clone()).expect("Error while sending message:");
+        println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, nbr_q);
     }
     fn process_connect(
         &mut self,
@@ -108,19 +108,45 @@ impl Node {
         if let Message::Connect(level, sender_index) = msg {
             if level < self.level {
                 self.status.insert(sender_index, Status::Branch);
-                let sender = sender_mapping.get(&sender_index).unwrap();
-                sender
-                    .send(Message::Initiate(
+                let sender = sender_mapping.get(&sender_index).expect("Error while reading 'sender_mapping':");
+                let msg = Message::Initiate(
                         self.level, self.name, self.state, self.index,
-                    ))
-                    .unwrap();
-            } else if *self.status.get(&sender_index).unwrap() == Status::Basic {
+                    );
+                sender
+                    .send(msg.clone())
+                    .expect("Error while sending message:");
+                println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, sender_index);
+            } else if *self.status.get(&sender_index).expect("Error while reading 'status':") == Status::Basic {
                 // wait (do nothing?)
-                let sender = sender_mapping.get(&self.index).unwrap();
-                sender.send(msg).unwrap();
+                /* Add the message to the end of the channel */
+                let sender = sender_mapping.get(&self.index).expect("Error while reading 'sender_mapping':");
+                sender.send(msg.clone()).expect("Error while sending message:");
+                println!("Thread [{:?}]: Pushed message {:?} to the end of the channel", self.index, msg);
+                // Add artificial sleep?
             } else {
-                let sender = sender_mapping.get(&sender_index).unwrap();
-                let new_name = if self.name < sender_index.index() as u32 {
+                let sender = sender_mapping.get(&sender_index).expect("Error while reading 'sender_mapping':");
+
+                /* Finds the weight of the edge between 'self.index' and 'sender_index' */
+                /* Might be inefficient! */
+                /* Repeat code : Possible to move it into a function */
+                let mut wt = 0; // see if the initial value is correct
+                {
+                    let graph = self.graph.read().expect("Error while reading 'graph':");
+                    for edge in graph.edges(self.index) {
+                        let src = edge.source();
+                        let target = edge.target();
+                        let raw_edge = (self.index, sender_index);
+                        if (src, target) == raw_edge || (target, src) == raw_edge {
+                            // should get into at least once
+                            wt = *edge.weight();
+                            break;
+                        }
+                    }
+                }
+                let new_name = wt;
+
+                /* Old method to name the fragment */
+                /*let new_name = if self.name < sender_index.index() as i32 {
                     format!(
                         "{}{}",
                         self.name.to_string(),
@@ -136,18 +162,21 @@ impl Node {
                     )
                     .parse::<u32>()
                     .unwrap()
-                };
-                sender
-                    .send(Message::Initiate(
+                };*/
+
+                let msg = Message::Initiate(
                         self.level + 1,
                         new_name,
                         State::Find,
                         self.index,
-                    ))
-                    .unwrap();
+                    );
+                sender
+                    .send(msg.clone())
+                    .expect("Error while sending message:");
+                println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, sender_index);
             }
         } else {
-            panic!("Wrong message!");
+            panic!("Wrong control flow!");
         }
     }
     fn process_initiate(
@@ -157,25 +186,27 @@ impl Node {
     ) {
         if let Message::Initiate(level, name, state, sender_index) = msg {
             self.level = level;
-            self.name = name; // could be a potential problem
+            self.name = name; // could be a potential problem (only if implemented as a String)
             self.state = state;
             self.parent = Some(sender_index);
             self.best_node = None;
             self.best_wt = std::i32::MAX;
             self.test_node = None;
             {
-                let graph = self.graph.read().unwrap();
+                let graph = self.graph.read().expect("Error while reading 'graph':");
                 for nbr_index in graph.neighbors(self.index) {
                     if nbr_index != sender_index
-                        && *self.status.get(&nbr_index).unwrap() == Status::Branch
+                        && *self.status.get(&nbr_index).expect("Error while reading 'status':") == Status::Branch
                     {
-                        let sender = sender_mapping.get(&nbr_index).unwrap();
-                        sender
-                            .send(Message::Initiate(
-                                level, name, // could be a potential problem
+                        let sender = sender_mapping.get(&nbr_index).expect("Error while reading 'sender_mapping':");
+                        let msg = Message::Initiate(
+                                level, name, // could be a potential problem (only if implemented as a String)
                                 state, self.index,
-                            ))
-                            .unwrap();
+                            );
+                        sender
+                            .send(msg.clone())
+                            .expect("Error while sending message:");
+                        println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, nbr_index);
                     }
                 }
             }
@@ -184,21 +215,21 @@ impl Node {
                 self.find_min(sender_mapping);
             }
         } else {
-            panic!("Wrong message!");
+            panic!("Wrong control flow!");
         }
     }
     fn find_min(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
         let mut min_edge = None;
         let mut q = None;
-        let mut wt = 0; // check initial value is correct or not
+        let mut wt = std::i32::MAX; // check initial value is correct or not
         {
-            let graph = self.graph.read().unwrap();
+            let graph = self.graph.read().expect("Error while reading 'graph':");
             let edges = graph.edges(self.index);
             for edge in edges {
                 let src = edge.source();
                 let target = edge.target();
                 let nbr_q = if src == self.index { target } else { src };
-                if *self.status.get(&nbr_q).unwrap() == Status::Basic {
+                if *self.status.get(&nbr_q).expect("Error while reading 'status':") == Status::Basic {
                     if min_edge == None {
                         min_edge = Some(edge.id());
                         q = Some(nbr_q);
@@ -218,12 +249,14 @@ impl Node {
         if let Some(_edge) = min_edge {
             if let Some(nbr_q) = q {
                 self.test_node = q;
-                let sender = sender_mapping.get(&nbr_q).unwrap();
+                let sender = sender_mapping.get(&nbr_q).expect("Error while reading 'sender_mapping':");
+                let msg = Message::Test(self.level, self.name, self.index);
                 sender
-                    .send(Message::Test(self.level, self.name, self.index))
-                    .unwrap(); // check clone()
+                    .send(msg.clone())
+                    .expect("Error while sending message:"); // check clone()
+                println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, nbr_q);
             } else {
-                //invalid / impossible
+                println!("Invalid control flow!");
             }
         } else {
             self.test_node = None;
@@ -231,46 +264,57 @@ impl Node {
         }
     }
     fn report(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        let graph = self.graph.read().unwrap();
+        let graph = self.graph.read().expect("Error while reading 'graph':");
         let mut cnt = 0;
         for q in graph.node_indices() {
-            if *self.status.get(&q).unwrap() == Status::Branch && q != self.parent.unwrap() {
+            if *self.status.get(&q).expect("Error while reading 'status':") == Status::Branch && q != self.parent.expect("Error: parent found 'None':") {
                 cnt += 1;
             }
         }
         if self.rec == cnt && self.test_node == None {
+            /* set some flag? to be used whenever a new test message appears after sending the below report message? */
             self.state = State::Found;
-            let sender = sender_mapping.get(&self.parent.unwrap()).unwrap();
+            let sender = sender_mapping.get(&self.parent.expect("Error: parent found 'None':")).expect("Error while reading 'sender_mapping':");
+            let msg = Message::Report(self.best_wt, self.index);
             sender
-                .send(Message::Report(self.best_wt, self.index))
-                .unwrap();
+                .send(msg.clone())
+                .expect("Error while sending message:");
+            println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, self.parent.unwrap());
         } else {
             //skip
         }
     }
     fn process_test(&mut self, msg: Message, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        let msg_copy = msg.clone();
+        /* No need to clone when 'name' is of type 'int' as opposed to 'String' */
+        /* let msg_copy = msg.clone(); */
         if let Message::Test(level, name, sender_index) = msg {
             if level > self.level {
-                //wait
-                let sender = sender_mapping.get(&self.index).unwrap();
-                sender.send(msg_copy).unwrap();
+                /* wait */
+                /* Add the message to the end of the channel */
+                let sender = sender_mapping.get(&self.index).expect("Error while reading 'sender_mapping':");
+                sender.send(msg.clone()).expect("Error while sending message:");
+                println!("Thread [{:?}]: Pushed message {:?} to the end of the channel", self.index, msg);
+                /* Add artificial sleep? */
             } else if self.name == name {
-                if *self.status.get(&sender_index).unwrap() == Status::Basic {
+                if *self.status.get(&sender_index).expect("Error while reading 'status':") == Status::Basic {
                     self.status.insert(sender_index, Status::Reject);
                 }
-                if sender_index != self.test_node.unwrap() {
-                    let sender = sender_mapping.get(&sender_index).unwrap();
-                    sender.send(Message::Reject(self.index)).unwrap();
+                if self.test_node == None || sender_index != self.test_node.expect("Error: test_node found 'None':") {
+                    let sender = sender_mapping.get(&sender_index).expect("Error while reading 'sender_mapping':");
+                    let msg = Message::Reject(self.index);
+                    sender.send(msg.clone()).expect("Error while sending message:");
+                    println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, sender_index);
                 } else {
                     self.find_min(sender_mapping);
                 }
             } else {
-                let sender = sender_mapping.get(&sender_index).unwrap();
-                sender.send(Message::Accept(self.index)).unwrap();
+                let sender = sender_mapping.get(&sender_index).expect("Error while reading 'sender_mapping':");
+                let msg = Message::Accept(self.index);
+                sender.send(msg.clone()).expect("Error while sending message:");
+                println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, sender_index);
             }
         } else {
-            // invalid message
+            panic!("Wrong control flow!");
         }
     }
     fn process_accept(
@@ -280,9 +324,12 @@ impl Node {
     ) {
         if let Message::Accept(sender_index) = msg {
             self.test_node = None;
+            /* Finds the weight of the edge between 'self.index' and 'sender_index' */
+            /* Might be inefficient! */
+            /* Repeat code : Possible to move it into a function */
             let mut wt = 0; // see if the initial value is correct
             {
-                let graph = self.graph.read().unwrap();
+                let graph = self.graph.read().expect("Error while reading 'graph':");
                 for edge in graph.edges(self.index) {
                     let src = edge.source();
                     let target = edge.target();
@@ -300,7 +347,7 @@ impl Node {
             }
             self.report(sender_mapping);
         } else {
-            //invalid
+            panic!("Wrong control flow!");
         }
     }
     fn process_reject(
@@ -309,12 +356,12 @@ impl Node {
         sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
     ) {
         if let Message::Reject(sender_index) = msg {
-            if *self.status.get(&sender_index).unwrap() == Status::Basic {
+            if *self.status.get(&sender_index).expect("Error while reading 'status':") == Status::Basic {
                 self.status.insert(sender_index, Status::Reject);
             }
             self.find_min(sender_mapping);
         } else {
-            //invalid
+            panic!("Wrong control flow!");
         }
     }
     fn process_report(
@@ -323,7 +370,7 @@ impl Node {
         sender_mapping: &HashMap<NodeIndex, Sender<Message>>,
     ) {
         if let Message::Report(wt, sender_index) = msg {
-            if sender_index != self.parent.unwrap() {
+            if sender_index != self.parent.expect("Error: parent found 'None':") {
                 if wt < self.best_wt {
                     self.best_wt = wt;
                     self.best_node = Some(sender_index);
@@ -332,33 +379,42 @@ impl Node {
                 self.report(sender_mapping);
             } else {
                 if self.state == State::Find {
-                    //wait
-                    let sender = sender_mapping.get(&self.index).unwrap();
-                    sender.send(msg).unwrap();
+                    /* wait */
+                    /* Add the message to the end of the channel */
+                    let sender = sender_mapping.get(&self.index).expect("Error while reading 'sender_mapping':");
+                    sender.send(msg.clone()).expect("Error while sending message:");
+                    println!("Thread [{:?}]: Pushed message {:?} to the end of the channel", self.index, msg);
+                    /* Add artificial sleep? */
                 } else if wt > self.best_wt {
                     self.change_root(sender_mapping);
                 } else if wt == self.best_wt && wt == std::i32::MAX {
-                    //stop (what to do here?)
+                    /* stop (what to do here?) */
                     let mut stop = self.stop.write().unwrap();
                     *stop.get_mut() = true;
+                    /* send some 'message' to all the nodes? */
                 } else {
                     //invalid? do nothing?
                 }
             }
         } else {
-            //invalid
+            panic!("Wrong control flow!");
         }
     }
     fn change_root(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        if *self.status.get(&self.best_node.unwrap()).unwrap() == Status::Branch {
-            let sender = sender_mapping.get(&self.best_node.unwrap()).unwrap();
-            sender.send(Message::ChangeRoot(self.index)).unwrap();
+        if *self.status.get(&self.best_node.expect("Error: best_node found 'None':")).expect("Error while reading 'status':") == Status::Branch {
+            let sender = sender_mapping.get(&self.best_node.expect("Error: best_node found 'None':")).expect("Error while reading 'sender_mapping':");
+            let msg = Message::ChangeRoot(self.index);
+            sender.send(msg.clone()).expect("Error while sending message:");
+            println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, self.best_node.unwrap());
         } else {
-            self.status.insert(self.best_node.unwrap(), Status::Branch);
-            let sender = sender_mapping.get(&self.best_node.unwrap()).unwrap();
+            /* Whether to insert the status 'before' or 'after' the message is sent? */
+            self.status.insert(self.best_node.expect("Error: best_node found 'None':"), Status::Branch);
+            let sender = sender_mapping.get(&self.best_node.expect("Error: best_node found 'None':")).expect("Error while reading 'sender_mapping':");
+            let msg = Message::Connect(self.level, self.index);
             sender
-                .send(Message::Connect(self.level, self.index))
-                .unwrap();
+                .send(msg.clone())
+                .expect("Error while sending message:");
+            println!("Thread [{:?}]: Sent message {:?} to {:?}", self.index, msg, self.best_node.unwrap());
         }
     }
     fn process_change_root(
@@ -369,7 +425,7 @@ impl Node {
         if let Message::ChangeRoot(_sender_index) = msg {
             self.change_root(sender_mapping);
         } else {
-            //invalid
+            panic!("Wrong control flow!");
         }
     }
 }
@@ -414,7 +470,7 @@ fn main() {
     let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> =
         Arc::new(RwLock::new(orig_mapping));
     let stop = Arc::new(RwLock::new(AtomicBool::new(false)));
-    for node_index in graph.read().unwrap().node_indices() {
+    for node_index in graph.read().expect("Error while reading 'graph':").node_indices() {
         println!("creating node and mapping..");
         let node = Node::new(Arc::clone(&graph), node_index, Arc::clone(&stop));
         let mut mapping = orig_mapping.write().unwrap();
@@ -424,34 +480,37 @@ fn main() {
 
     let mut sender_mapping: HashMap<NodeIndex, Sender<Message>> = HashMap::new();
     let mut receiver_mapping: HashMap<NodeIndex, Receiver<Message>> = HashMap::new();
-    for node_index in graph.read().unwrap().node_indices() {
+    for node_index in graph.read().expect("Error while reading 'graph':").node_indices() {
         let (sender, receiver) = mpsc::channel();
         sender_mapping.insert(node_index, sender);
         receiver_mapping.insert(node_index, receiver);
     }
 
     let mut handles = vec![];
-    for node_index in graph.read().unwrap().node_indices() {
+    for node_index in graph.read().expect("Error while reading 'graph':").node_indices() {
         let move_mapping = Arc::clone(&orig_mapping);
         let sender_mapping = sender_mapping.clone();
         let receiver = receiver_mapping.remove(&node_index).unwrap();
         let handle = thread::Builder::new()
             .name(node_index.index().to_string())
             .spawn(move || {
-                println!("Thread no. {:?}", node_index);
+                println!("Thread no. {:?} started!", node_index);
                 let receiver = receiver;
                 let sender_mapping = sender_mapping;
                 let mapping = move_mapping.read().unwrap();
                 let node = mapping.get(&node_index).unwrap();
+                /* is it okay to keep 'node' mutated throught this thread's scope? */
                 let mut node = node.write().unwrap();
-                node.initialize(&sender_mapping, &receiver);
+                /* Should we wakeup (initialize) all the nodes? */
+                node.initialize(&sender_mapping);
                 loop {
-                    let recv = receiver.try_recv();
                     {
                         if *node.stop.write().unwrap().get_mut() {
                             break;
                         }
                     }
+                    /* Blocking receive? OR Non-blocking? */
+                    let recv = receiver.try_recv();
                     let msg = match recv {
                         Err(TryRecvError::Empty) => {
                             continue;
@@ -461,37 +520,44 @@ fn main() {
                         }
                         Ok(message) => message,
                     };
-                    println!("Thread [{:?}]: Got message: {:?}", node_index, msg);
                     match msg {
-                        Message::Connect(_, _) => {
+                        Message::Connect(_, sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_connect(msg, &sender_mapping);
                         }
-                        Message::Initiate(_, _, _, _) => {
+                        Message::Initiate(_, _, _, sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_initiate(msg, &sender_mapping);
                         }
-                        Message::Test(_, _, _) => {
+                        Message::Test(_, _, sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_test(msg, &sender_mapping);
                         }
-                        Message::Accept(_) => {
+                        Message::Accept(sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_accept(msg, &sender_mapping);
                         }
-                        Message::Reject(_) => {
+                        Message::Reject(sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_reject(msg, &sender_mapping);
                         }
-                        Message::Report(_, _) => {
+                        Message::Report(_, sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_report(msg, &sender_mapping);
+                            println!("node.best_wt: {:?}", node.best_wt);
                         }
-                        Message::ChangeRoot(_) => {
+                        Message::ChangeRoot(sender_index) => {
+                            println!("Thread [{:?}]: Got message: {:?} from {:?}", node_index, msg, sender_index);
                             node.process_change_root(msg, &sender_mapping);
                         }
                     }
                 }
-                println!("Stopped");
+                println!("Thread no. {:?} Stopped!", node_index);
             });
         handles.push(handle);
     }
     for handle in handles {
-        handle.unwrap().join().unwrap();
+        handle.expect("Error while unwrapping 'handle':").join().expect("Error while unwrapping 'handle.join()':");
     }
     println!("All threads finished!");
 }
