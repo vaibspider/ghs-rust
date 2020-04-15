@@ -714,10 +714,17 @@ fn main() {
             }
         }
     }
+
     println!("Pairs: {:?}", pairs);
     let mut weight_map = HashMap::new();
     let graph = graph.read().unwrap();
-    for node_index in graph.node_indices() {
+    for edge in graph.edge_references() {
+      let source = edge.source();
+      let target = edge.target();
+      let weight = edge.weight();
+      weight_map.insert((source, target), weight);
+    }
+    /*for node_index in graph.node_indices() {
         for edge in graph.edges(node_index) {
             let src = edge.source();
             let target = edge.target();
@@ -730,12 +737,21 @@ fn main() {
             weight_map.insert(pair, weight);
         }
     }
+    */
     let mut triplets = vec![];
     for pair in pairs {
-        let weight = weight_map
-            .get(&pair)
-            .expect("Error while getting a pair weight from weight_map:");
         let (one, two) = pair;
+        let mut new_pair = (one, two);
+        let weight;
+        if weight_map.get(&new_pair) == None {
+          new_pair = (two, one);
+          weight = weight_map.get(&new_pair).unwrap();
+        }
+        else {
+          weight = weight_map.get(&new_pair).unwrap();
+        }
+        let (one, two) = new_pair;
+        //.expect("Error while getting a pair weight from weight_map:");
         let triplet = (one, two, weight);
         triplets.push(triplet);
     }
