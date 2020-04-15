@@ -541,21 +541,6 @@ fn main() {
     graph.extend_with_edges(&edges_vec[..]);
     //println!("{:?}", graph);
 
-    /*
-    let mut kruskal_output_file = File::create("kruskal_output.mst").unwrap();
-    let kruskal_mst = min_spanning_tree(&graph);
-    for item in kruskal_mst {
-        if let Element::Edge {
-            source,
-            target,
-            weight,
-        } = item
-        {
-            writeln!(kruskal_output_file, "({}, {}, {})", source, target, weight).unwrap();
-        }
-    }
-    */
-
     let graph: Arc<RwLock<Graph<i32, i32, Undirected>>> = Arc::new(RwLock::new(graph));
     let orig_mapping: HashMap<NodeIndex, RwLock<Node>> = HashMap::new();
     let orig_mapping: Arc<RwLock<HashMap<NodeIndex, RwLock<Node>>>> =
@@ -738,11 +723,6 @@ fn main() {
     triplets.sort_unstable_by(|(_, _, weight1), (_, _, weight2)| weight1.cmp(weight2));
     //println!("Sorted Triplets: {:?}", triplets);
 
-    /*let mut output_file = File::create("ghs_output.mst").unwrap();
-    for triplet in triplets {
-        let (one, two, three) = triplet;
-        writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
-    }*/
     for triplet in triplets {
         let (one, two, three) = triplet;
         println!("({}, {}, {})", one.index(), two.index(), three);
