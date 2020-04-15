@@ -1,13 +1,9 @@
-use petgraph::algo::min_spanning_tree;
-use petgraph::data::Element;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::Undirected;
 use std::clone::Clone;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
 use std::marker::Copy;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
@@ -122,10 +118,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                /*println!(
-                    "Thread [{:?}]: Sent message {:?} to {:?}",
-                    self.index, msg, sender_index
-                );*/
+            /*println!(
+                "Thread [{:?}]: Sent message {:?} to {:?}",
+                self.index, msg, sender_index
+            );*/
             } else if *self
                 .status
                 .get(&sender_index)
@@ -140,10 +136,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                /*println!(
-                    "Thread [{:?}]: Pushed message {:?} to the end of the channel",
-                    self.index, msg
-                );*/
+            /*println!(
+                "Thread [{:?}]: Pushed message {:?} to the end of the channel",
+                self.index, msg
+            );*/
             } else {
                 let sender = sender_mapping
                     .get(&sender_index)
@@ -205,11 +201,7 @@ impl Node {
                         let sender = sender_mapping
                             .get(&nbr_index)
                             .expect("Error while reading 'sender_mapping':");
-                        let msg = Message::Initiate(
-                            level,
-                            name,
-                            state, self.index,
-                        );
+                        let msg = Message::Initiate(level, name, state, self.index);
                         sender
                             .send(msg.clone())
                             .expect("Error while sending message:");
@@ -262,10 +254,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:"); // check clone()
-                /*println!(
-                    "Thread [{:?}]: Sent message {:?} to {:?}",
-                    self.index, msg, nbr_q
-                );*/
+                                                             /*println!(
+                                                                 "Thread [{:?}]: Sent message {:?} to {:?}",
+                                                                 self.index, msg, nbr_q
+                                                             );*/
             } else {
                 //println!("Invalid control flow!");
             }
@@ -293,12 +285,12 @@ impl Node {
             sender
                 .send(msg.clone())
                 .expect("Error while sending message:");
-            /*println!(
-                "Thread [{:?}]: Sent message {:?} to {:?}",
-                self.index,
-                msg,
-                self.parent.unwrap()
-            );*/
+        /*println!(
+            "Thread [{:?}]: Sent message {:?} to {:?}",
+            self.index,
+            msg,
+            self.parent.unwrap()
+        );*/
         } else {
             //skip
         }
@@ -314,10 +306,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                /*println!(
-                    "Thread [{:?}]: Pushed message {:?} to the end of the channel",
-                    self.index, msg
-                );*/
+            /*println!(
+                "Thread [{:?}]: Pushed message {:?} to the end of the channel",
+                self.index, msg
+            );*/
             } else if self.name == name {
                 if *self
                     .status
@@ -339,10 +331,10 @@ impl Node {
                     sender
                         .send(msg.clone())
                         .expect("Error while sending message:");
-                    /*println!(
-                        "Thread [{:?}]: Sent message {:?} to {:?}",
-                        self.index, msg, sender_index
-                    );*/
+                /*println!(
+                    "Thread [{:?}]: Sent message {:?} to {:?}",
+                    self.index, msg, sender_index
+                );*/
                 } else {
                     self.find_min(sender_mapping);
                 }
@@ -435,10 +427,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                /*println!(
-                    "Thread [{:?}]: Pushed message {:?} to the end of the channel",
-                    self.index, msg
-                );*/
+            /*println!(
+                "Thread [{:?}]: Pushed message {:?} to the end of the channel",
+                self.index, msg
+            );*/
             } else if wt > self.best_wt {
                 self.change_root(sender_mapping);
             } else if wt == self.best_wt && wt == std::i32::MAX {
@@ -466,12 +458,12 @@ impl Node {
             sender
                 .send(msg.clone())
                 .expect("Error while sending message:");
-            /*println!(
-                "Thread [{:?}]: Sent message {:?} to {:?}",
-                self.index,
-                msg,
-                self.best_node.unwrap()
-            );*/
+        /*println!(
+            "Thread [{:?}]: Sent message {:?} to {:?}",
+            self.index,
+            msg,
+            self.best_node.unwrap()
+        );*/
         } else {
             /* Whether to insert the status 'before' or 'after' the message is sent? */
             self.status.insert(
@@ -519,13 +511,13 @@ fn main() {
     let mut lines = input_buffer.lines();
     let lines_ref = &mut lines;
     let nodes = lines_ref.next().unwrap();
-    let nodes = u32::from_str(nodes).unwrap();
+    let _nodes = u32::from_str(nodes).unwrap();
     //println!("No. of Nodes: {:?}", nodes);
     let mut graph: Graph<i32, i32, Undirected> = Graph::default();
     let mut edges_vec = vec![];
-    let mut edges = 0;
+    let mut _edges = 0;
     for line in lines {
-        edges += 1;
+        _edges += 1;
         let tuple_vec: Vec<&str> = line
             .trim_matches(|p| p == '(' || p == ')')
             .split(',')
@@ -609,42 +601,42 @@ fn main() {
                         Ok(message) => message,
                     };
                     match msg {
-                        Message::Connect(_, sender_index) => {
+                        Message::Connect(_, _sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
                             );*/
                             node.process_connect(msg, &sender_mapping);
                         }
-                        Message::Initiate(_, _, _, sender_index) => {
+                        Message::Initiate(_, _, _, _sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
                             );*/
                             node.process_initiate(msg, &sender_mapping);
                         }
-                        Message::Test(_, _, sender_index) => {
+                        Message::Test(_, _, _sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
                             );*/
                             node.process_test(msg, &sender_mapping);
                         }
-                        Message::Accept(sender_index) => {
+                        Message::Accept(_sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
                             );*/
                             node.process_accept(msg, &sender_mapping);
                         }
-                        Message::Reject(sender_index) => {
+                        Message::Reject(_sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
                             );*/
                             node.process_reject(msg, &sender_mapping);
                         }
-                        Message::Report(_, sender_index) => {
+                        Message::Report(_, _sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
@@ -652,7 +644,7 @@ fn main() {
                             node.process_report(msg, &sender_mapping);
                             //println!("node.best_wt: {:?}", node.best_wt);
                         }
-                        Message::ChangeRoot(sender_index) => {
+                        Message::ChangeRoot(_sender_index) => {
                             /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
