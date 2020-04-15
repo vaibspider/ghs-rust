@@ -132,7 +132,7 @@ impl Node {
                 .expect("Error while reading 'status':")
                 == Status::Basic
             {
-                // wait (do nothing?)
+                // wait
                 /* Add the message to the end of the channel */
                 let sender = sender_mapping
                     .get(&self.index)
@@ -144,15 +144,12 @@ impl Node {
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
                 );*/
-            // Add artificial sleep?
             } else {
                 let sender = sender_mapping
                     .get(&sender_index)
                     .expect("Error while reading 'sender_mapping':");
 
                 /* Finds the weight of the edge between 'self.index' and 'sender_index' */
-                /* Might be inefficient! */
-                /* Repeat code : Possible to move it into a function */
                 let mut wt = 0; // see if the initial value is correct
                 {
                     let graph = self.graph.read().expect("Error while reading 'graph':");
@@ -189,7 +186,7 @@ impl Node {
     ) {
         if let Message::Initiate(level, name, state, sender_index) = msg {
             self.level = level;
-            self.name = name; // could be a potential problem (only if implemented as a String)
+            self.name = name;
             self.state = state;
             self.parent = Some(sender_index);
             self.best_node = None;
@@ -210,7 +207,7 @@ impl Node {
                             .expect("Error while reading 'sender_mapping':");
                         let msg = Message::Initiate(
                             level,
-                            name, // could be a potential problem (only if implemented as a String)
+                            name,
                             state, self.index,
                         );
                         sender
@@ -234,7 +231,7 @@ impl Node {
     fn find_min(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
         let mut min_edge = None;
         let mut q = None;
-        let mut wt = std::i32::MAX; // check initial value is correct or not
+        let mut wt = std::i32::MAX;
         {
             let graph = self.graph.read().expect("Error while reading 'graph':");
             let edges = graph.edges(self.index);
@@ -288,7 +285,6 @@ impl Node {
             }
         }
         if self.rec == cnt && self.test_node == None {
-            /* set some flag? to be used whenever a new test message appears after sending the below report message? */
             self.state = State::Found;
             let sender = sender_mapping
                 .get(&self.parent.expect("Error: parent found 'None':"))
@@ -308,8 +304,6 @@ impl Node {
         }
     }
     fn process_test(&mut self, msg: Message, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        /* No need to clone when 'name' is of type 'int' as opposed to 'String' */
-        /* let msg_copy = msg.clone(); */
         if let Message::Test(level, name, sender_index) = msg {
             if level > self.level {
                 /* wait */
@@ -324,7 +318,6 @@ impl Node {
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
                 );*/
-            /* Add artificial sleep? */
             } else if self.name == name {
                 if *self
                     .status
@@ -378,8 +371,6 @@ impl Node {
         if let Message::Accept(sender_index) = msg {
             self.test_node = None;
             /* Finds the weight of the edge between 'self.index' and 'sender_index' */
-            /* Might be inefficient! */
-            /* Repeat code : Possible to move it into a function */
             let mut wt = 0; // see if the initial value is correct
             {
                 let graph = self.graph.read().expect("Error while reading 'graph':");
@@ -448,16 +439,14 @@ impl Node {
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
                 );*/
-            /* Add artificial sleep? */
             } else if wt > self.best_wt {
                 self.change_root(sender_mapping);
             } else if wt == self.best_wt && wt == std::i32::MAX {
-                /* stop (what to do here?) */
+                /* stop */
                 let mut stop = self.stop.write().unwrap();
                 *stop.get_mut() = true;
-            /* send some 'message' to all the nodes? */
             } else {
-                //invalid? do nothing?
+                //invalid
             }
         } else {
             panic!("Wrong control flow!");
@@ -552,6 +541,7 @@ fn main() {
     graph.extend_with_edges(&edges_vec[..]);
     //println!("{:?}", graph);
 
+    /*
     let mut kruskal_output_file = File::create("kruskal_output.mst").unwrap();
     let kruskal_mst = min_spanning_tree(&graph);
     for item in kruskal_mst {
@@ -564,6 +554,7 @@ fn main() {
             writeln!(kruskal_output_file, "({}, {}, {})", source, target, weight).unwrap();
         }
     }
+    */
 
     let graph: Arc<RwLock<Graph<i32, i32, Undirected>>> = Arc::new(RwLock::new(graph));
     let orig_mapping: HashMap<NodeIndex, RwLock<Node>> = HashMap::new();
@@ -747,9 +738,13 @@ fn main() {
     triplets.sort_unstable_by(|(_, _, weight1), (_, _, weight2)| weight1.cmp(weight2));
     //println!("Sorted Triplets: {:?}", triplets);
 
-    let mut output_file = File::create("ghs_output.mst").unwrap();
+    /*let mut output_file = File::create("ghs_output.mst").unwrap();
     for triplet in triplets {
         let (one, two, three) = triplet;
         writeln!(output_file, "({}, {}, {})", one.index(), two.index(), three).unwrap();
+    }*/
+    for triplet in triplets {
+        let (one, two, three) = triplet;
+        println!("({}, {}, {})", one.index(), two.index(), three);
     }
 }
