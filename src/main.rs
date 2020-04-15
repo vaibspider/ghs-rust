@@ -76,7 +76,7 @@ impl Node {
         }
     }
     fn initialize(&mut self, sender_mapping: &HashMap<NodeIndex, Sender<Message>>) {
-        println!("Initializing node {:?}..", self.index);
+        //println!("Initializing node {:?}..", self.index);
         let graph = self.graph.read().expect("Error while reading 'graph':");
         let edges = graph.edges(self.index);
         let edge_min = edges
@@ -102,10 +102,10 @@ impl Node {
         sender
             .send(msg.clone())
             .expect("Error while sending message:");
-        println!(
+        /*println!(
             "Thread [{:?}]: Sent message {:?} to {:?}",
             self.index, msg, nbr_q
-        );
+        );*/
     }
     fn process_connect(
         &mut self,
@@ -122,10 +122,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Sent message {:?} to {:?}",
                     self.index, msg, sender_index
-                );
+                );*/
             } else if *self
                 .status
                 .get(&sender_index)
@@ -140,10 +140,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
-                );
+                );*/
             // Add artificial sleep?
             } else {
                 let sender = sender_mapping
@@ -173,10 +173,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Sent message {:?} to {:?}",
                     self.index, msg, sender_index
-                );
+                );*/
             }
         } else {
             panic!("Wrong control flow!");
@@ -216,10 +216,10 @@ impl Node {
                         sender
                             .send(msg.clone())
                             .expect("Error while sending message:");
-                        println!(
+                        /*println!(
                             "Thread [{:?}]: Sent message {:?} to {:?}",
                             self.index, msg, nbr_index
-                        );
+                        );*/
                     }
                 }
             }
@@ -265,12 +265,12 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:"); // check clone()
-                println!(
+                /*println!(
                     "Thread [{:?}]: Sent message {:?} to {:?}",
                     self.index, msg, nbr_q
-                );
+                );*/
             } else {
-                println!("Invalid control flow!");
+                //println!("Invalid control flow!");
             }
         } else {
             self.test_node = None;
@@ -297,12 +297,12 @@ impl Node {
             sender
                 .send(msg.clone())
                 .expect("Error while sending message:");
-            println!(
+            /*println!(
                 "Thread [{:?}]: Sent message {:?} to {:?}",
                 self.index,
                 msg,
                 self.parent.unwrap()
-            );
+            );*/
         } else {
             //skip
         }
@@ -320,10 +320,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
-                );
+                );*/
             /* Add artificial sleep? */
             } else if self.name == name {
                 if *self
@@ -346,10 +346,10 @@ impl Node {
                     sender
                         .send(msg.clone())
                         .expect("Error while sending message:");
-                    println!(
+                    /*println!(
                         "Thread [{:?}]: Sent message {:?} to {:?}",
                         self.index, msg, sender_index
-                    );
+                    );*/
                 } else {
                     self.find_min(sender_mapping);
                 }
@@ -361,10 +361,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Sent message {:?} to {:?}",
                     self.index, msg, sender_index
-                );
+                );*/
             }
         } else {
             panic!("Wrong control flow!");
@@ -444,10 +444,10 @@ impl Node {
                 sender
                     .send(msg.clone())
                     .expect("Error while sending message:");
-                println!(
+                /*println!(
                     "Thread [{:?}]: Pushed message {:?} to the end of the channel",
                     self.index, msg
-                );
+                );*/
             /* Add artificial sleep? */
             } else if wt > self.best_wt {
                 self.change_root(sender_mapping);
@@ -477,12 +477,12 @@ impl Node {
             sender
                 .send(msg.clone())
                 .expect("Error while sending message:");
-            println!(
+            /*println!(
                 "Thread [{:?}]: Sent message {:?} to {:?}",
                 self.index,
                 msg,
                 self.best_node.unwrap()
-            );
+            );*/
         } else {
             /* Whether to insert the status 'before' or 'after' the message is sent? */
             self.status.insert(
@@ -496,12 +496,12 @@ impl Node {
             sender
                 .send(msg.clone())
                 .expect("Error while sending message:");
-            println!(
+            /*println!(
                 "Thread [{:?}]: Sent message {:?} to {:?}",
                 self.index,
                 msg,
                 self.best_node.unwrap()
-            );
+            );*/
         }
     }
     fn process_change_root(
@@ -531,7 +531,7 @@ fn main() {
     let lines_ref = &mut lines;
     let nodes = lines_ref.next().unwrap();
     let nodes = u32::from_str(nodes).unwrap();
-    println!("No. of Nodes: {:?}", nodes);
+    //println!("No. of Nodes: {:?}", nodes);
     let mut graph: Graph<i32, i32, Undirected> = Graph::default();
     let mut edges_vec = vec![];
     let mut edges = 0;
@@ -548,9 +548,9 @@ fn main() {
         let tuple = (tuple_vec[0] as u32, tuple_vec[1] as u32, tuple_vec[2]);
         edges_vec.push(tuple);
     }
-    println!("No. of Edges: {}", edges);
+    //println!("No. of Edges: {}", edges);
     graph.extend_with_edges(&edges_vec[..]);
-    println!("{:?}", graph);
+    //println!("{:?}", graph);
 
     let mut kruskal_output_file = File::create("kruskal_output.mst").unwrap();
     let kruskal_mst = min_spanning_tree(&graph);
@@ -575,11 +575,11 @@ fn main() {
         .expect("Error while reading 'graph':")
         .node_indices()
     {
-        println!("creating node and mapping..");
+        //println!("creating node and mapping..");
         let node = Node::new(Arc::clone(&graph), node_index, Arc::clone(&stop));
         let mut mapping = orig_mapping.write().unwrap();
         mapping.insert(node_index, RwLock::new(node));
-        println!("created node and mapping..");
+        //println!("created node and mapping..");
     }
 
     let mut sender_mapping: HashMap<NodeIndex, Sender<Message>> = HashMap::new();
@@ -606,7 +606,7 @@ fn main() {
         let handle = thread::Builder::new()
             .name(node_index.index().to_string())
             .spawn(move || {
-                println!("Thread no. {:?} started!", node_index);
+                //println!("Thread no. {:?} started!", node_index);
                 let receiver = receiver;
                 let sender_mapping = sender_mapping;
                 let mapping = move_mapping.read().unwrap();
@@ -634,63 +634,63 @@ fn main() {
                     };
                     match msg {
                         Message::Connect(_, sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_connect(msg, &sender_mapping);
                         }
                         Message::Initiate(_, _, _, sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_initiate(msg, &sender_mapping);
                         }
                         Message::Test(_, _, sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_test(msg, &sender_mapping);
                         }
                         Message::Accept(sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_accept(msg, &sender_mapping);
                         }
                         Message::Reject(sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_reject(msg, &sender_mapping);
                         }
                         Message::Report(_, sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_report(msg, &sender_mapping);
-                            println!("node.best_wt: {:?}", node.best_wt);
+                            //println!("node.best_wt: {:?}", node.best_wt);
                         }
                         Message::ChangeRoot(sender_index) => {
-                            println!(
+                            /*println!(
                                 "Thread [{:?}]: Got message: {:?} from {:?}",
                                 node_index, msg, sender_index
-                            );
+                            );*/
                             node.process_change_root(msg, &sender_mapping);
                         }
                     }
                 }
-                println!("Thread no. {:?} Stopped!", node_index);
+                //println!("Thread no. {:?} Stopped!", node_index);
                 (node_index, node.status.clone())
             });
         handles.push(handle);
     }
-    println!("All threads finished!");
+    //println!("All threads finished!");
     let mut data: HashMap<NodeIndex, HashMap<NodeIndex, Status>> = HashMap::new();
     for handle in handles {
         let (node_index, status_map) = handle
@@ -714,7 +714,7 @@ fn main() {
             }
         }
     }
-    println!("Pairs: {:?}", pairs);
+    //println!("Pairs: {:?}", pairs);
 
     let mut weight_map = HashMap::new();
     let graph = graph.read().unwrap();
@@ -743,9 +743,9 @@ fn main() {
         let triplet = (one, two, weight);
         triplets.push(triplet);
     }
-    println!("Triplets: {:?}", triplets);
+    //println!("Triplets: {:?}", triplets);
     triplets.sort_unstable_by(|(_, _, weight1), (_, _, weight2)| weight1.cmp(weight2));
-    println!("Sorted Triplets: {:?}", triplets);
+    //println!("Sorted Triplets: {:?}", triplets);
 
     let mut output_file = File::create("ghs_output.mst").unwrap();
     for triplet in triplets {
