@@ -1,0 +1,9 @@
+This is a GHS Algorithm (to compute Distributed Minimum Spanning Tree) implementation in Rust.
+
+Build command:
+1. cargo build or 
+2. cargo build --release
+
+Run GHS:
+1. ./target/debug/ghs <input-file> or
+2. ./target/release/ghs <input-file>
