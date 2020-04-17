@@ -7,3 +7,10 @@ Build command:
 Run GHS:
 1. ./target/debug/ghs <input-file> or
 2. ./target/release/ghs <input-file>
+
+Input for GHS is a connected, undirected graph with unique edge weights.
+
+Format for 'input-file':
+See example file - "input".
+The first line is the number of nodes in the input graph.
+Every line following the first line is an edge in the format - (nodeindex, nodeindex, weight).
